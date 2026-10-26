@@ -1,0 +1,7 @@
+scenario,condition,traffic_type,bitrate_kbps,packet_loss_pct,jitter_ms,tcp_packets_dropped,source
+1_fifo,before_congestion,udp_voip,500.0,0.0,0.382,0,report fig 35
+1_fifo,under_congestion,udp_voip,277.0,36.6,378.715,not_isolated,report fig 38
+2_priority_pq,under_congestion,udp_voip,500.0,0.0,0.382,0,report fig 39
+2_priority_pq,under_congestion,tcp_data,varies,high,varies,680814,report fig 40
+3_weighted_wqs,under_congestion,udp_voip,482.0,0.42,0.779,0,report fig 42
+3_weighted_wqs,under_congestion,tcp_data,300.0,low,low,5381,report fig 41
