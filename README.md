@@ -14,6 +14,29 @@ Using Linux kernel traffic control (`tc`), the **Hierarchical Token Bucket (HTB)
 | **Tools** | Linux `tc`, `iptables`, `iperf3`, `hping3`, `tcpdump`, `bind9`, `apache2`, `nfs` |
 | **Report** | [`docs/Rapport_Systeme_Gestion_QoS_Reseaux.pdf`](docs/Rapport_Systeme_Gestion_QoS_Reseaux.pdf) (French, 56 pages) |
 
+## Real-World Context: Why This Project Exists
+
+### 1. The Real-World Need
+In enterprise networks, campus backbones, and branch routers, completely different classes of traffic continuously compete for the same physical bandwidth:
+- **The Tail-Drop and Bufferbloat Trap (Default FIFO):** Operating system network stacks defaults to First-In, First-Out (FIFO) queuing. When an employee triggers a heavy transfer (such as an NFS file backup, ISO download, or software update), TCP expands its window to maximize link capacity. This fills router queues, introducing massive delay (bufferbloat) and dropping packets at random. Delay-sensitive UDP services like VoIP and video conferencing suffer catastrophic degradation: jitter spikes, audio cuts out, and calls drop.
+- **The Danger of Naive Priority Queuing (TCP Starvation):** A common intuitive fix is to configure Strict Priority Queuing (PQ) giving absolute precedence to voice/video. However, during high volume periods, strict priority causes complete starvation of lower-priority queues. Bursty UDP flows monopolize the scheduler, causing TCP flows to suffer massive packet drops, timeout, and drop connections entirely (web pages freeze, file transfers abort, and SSH sessions disconnect).
+- **The Enterprise Solution (Weighted Class-Based Sharing):** Production environments require a deterministic queuing policy. Linux kernel traffic control (`tc`) combined with **Hierarchical Token Bucket (HTB)** and **Stochastic Fairness Queueing (SFQ)** allows network engineers to guarantee bandwidth for real-time services while preserving an equitable share for bulk TCP streams, eliminating starvation even during severe link congestion.
+
+### 2. Why We Built This Lab
+The objective was to recreate an authentic multi-tier enterprise network in a VMware Linux testbed, induce deliberate bottleneck saturation, and measure the exact mathematical differences between FIFO, Strict Priority Queuing, and Weighted Queuing Sharing (WQS):
+- To quantify how severely default FIFO degrades real-time VoIP/UDP traffic under congestion.
+- To demonstrate the catastrophic TCP starvation caused by Strict Priority Queuing.
+- To prove that Weighted Queuing Sharing (WQS) achieves the ideal balance: near-zero loss for real-time traffic while reducing TCP packet drops by **99.2%**.
+
+### 3. What Was Engineered
+- **Multi-Subnet Virtual Topology:** Client LAN (`192.168.1.0/24`), Transit link (`172.22.0.0/30`), and Server/Admin LAN (`10.0.0.0/24`) routed across Ubuntu and Kali Linux virtual machines.
+- **Core Network Services:** BIND9 authoritative DNS, ISC-DHCP dynamic pool allocation, Apache2 web service, and NFS distributed file sharing.
+- **Traffic Marking via Netfilter:** `iptables -t mangle` classification assigning `MARK 10` to real-time UDP traffic and `MARK 20` to TCP/ICMP streams.
+- **Active Traffic Control Queuing Disciplines:**
+  - Strict Priority Queuing via HTB classes (`prio 0` vs `prio 5`) with shallow FIFO buffers (`pfifo limit 5`).
+  - Weighted Queuing Sharing (WQS) via proportional HTB rate guarantees (700 kbps UDP / 300 kbps TCP on 1 Mbps link) combined with Stochastic Fairness Queueing (`sfq perturb 10`) to prevent individual connection monopolization.
+- **Multi-Stream Stress Testing:** Bottleneck saturation combining `hping3` SYN and ICMP flood, multi-threaded `curl` loops, NFS file operations, and `iperf3` VoIP stream measurement.
+
 ## Results at a Glance
 
 All three scenarios were subjected to identical network saturation using multi-threaded `hping3` TCP/ICMP flooding and simultaneous background HTTP and NFS requests across the core router:
